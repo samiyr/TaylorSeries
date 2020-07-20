@@ -132,6 +132,14 @@ public struct TaylorSeries<Number: Real> {
                 return (num / den, 2 * n)
             }
         }
+        /// Gives erf(x) * sqrt(pi) / 2
+        public static var erf: Summand {
+            return { n in
+                let num = paritySign(n)
+                let den = factorial(n) * Number(2 * n + 1)
+                return (num / den, 2 * n + 1)
+            }
+        }
     }
     
     // Helper functions, which define commonly needed functions when working with Taylor series.
