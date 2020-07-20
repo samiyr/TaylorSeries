@@ -14,6 +14,14 @@ final class TaylorSeriesTests: XCTestCase {
         let sin = series.truncatedSeries(center: 0, to: 1e-16)
         XCTAssert(abs(sin(1.0) - Darwin.sin(1.0)) < 1e-16)
     }
+    func testBesselJ() {
+        measure {
+            let series = TaylorSeries<Double>(summand: TaylorSeries.Common.besselJ(0))
+            let bessel = series.truncatedSeries(center: 0, to: 1e-16)
+            XCTAssert(abs(bessel(1.0) - 0.765198) < 1e-3)
+            XCTAssert(abs(bessel(5.0) - -0.177597) < 1e-3)
+        }
+    }
 
     func testFactorialPerformance() {
         measure {
@@ -50,7 +58,14 @@ final class TaylorSeriesTests: XCTestCase {
             }
         }
     }
-    
+    func testParitySignPerformance3() {
+        measure {
+            for i in 0...1000000 {
+                let _ = 1 - 2 * (i & 1)
+            }
+        }
+    }
+
     static var allTests = [
         ("expTest", testExp),
         ("sinTest", testSin)

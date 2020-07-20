@@ -1,5 +1,5 @@
 import Foundation
-import Numerics
+import RealModule
 
 /// Represents a Taylor Series expansion for some real-analytic function.
 public struct TaylorSeries<Number: Real> {
@@ -66,6 +66,14 @@ public struct TaylorSeries<Number: Real> {
                 return num / den
             }
         }
+        public static var arcsinh: Summand {
+            return { x, n in
+                let num = paritySign(n) * factorial(2 * n) * Number.pow(x, 2 * n + 1)
+                let den = Number.pow(2, 2 * n) * Number.pow(factorial(n), 2) * Number(2 * n + 1)
+                return num / den
+            }
+        }
+
         public static var cos: Summand {
             return { x, n in
                 return paritySign(n) * Number.pow(x, 2 * n) / factorial(2 * n)
@@ -88,6 +96,13 @@ public struct TaylorSeries<Number: Real> {
             return { x, n in
                 if n == 0 { return 0 }
                 return paritySign(n + 1) * Number.pow(x, n) / Number(n)
+            }
+        }
+        public static func besselJ(_ nu: Number) -> Summand {
+            return { x, n in
+                let num = Number.pow(x / Number(2), nu) * paritySign(n) * Number.pow(x / Number(2), 2 * n)
+                let den = factorial(n) * Number.gamma(nu + Number(n) + 1)
+                return  num / den
             }
         }
     }
