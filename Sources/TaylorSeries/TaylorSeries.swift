@@ -20,6 +20,8 @@ public struct TaylorSeries<Number: Real> {
         }
     }
     /// Returns a callable closure where the series is truncated at an appropariate point such that the difference between the last two terms is less than `epsilon`. However, the summing is capped by `max`, which defaults to 1000.
+    /// Note that `epsilon` does not guarantee correct digits, see `testBesselJ()` in `TaylorSeriesTests.swift`.
+    /// To guarantee correct digits, use Taylor's theorem to obtain an appropriate truncating index and use `truncatedSeries(center:, up:)` directly.
     public func truncatedSeries(center: Number, to epsilon: Number, max iterations: Int = 1000) -> (Number) -> (Number) {
         return { x in
             var value = Number(0)
@@ -100,7 +102,7 @@ public struct TaylorSeries<Number: Real> {
         }
         public static func besselJ(_ nu: Number) -> Summand {
             return { x, n in
-                let num = Number.pow(x / Number(2), nu) * paritySign(n) * Number.pow(x / Number(2), 2 * n)
+                let num = paritySign(n) * Number.pow(x / Number(2), Number(2 * n) + nu)
                 let den = factorial(n) * Number.gamma(nu + Number(n) + 1)
                 return  num / den
             }

@@ -18,8 +18,9 @@ final class TaylorSeriesTests: XCTestCase {
         measure {
             let series = TaylorSeries<Double>(summand: TaylorSeries.Common.besselJ(0))
             let bessel = series.truncatedSeries(center: 0, to: 1e-16)
-            XCTAssert(abs(bessel(1.0) - 0.765198) < 1e-3)
-            XCTAssert(abs(bessel(5.0) - -0.177597) < 1e-3)
+            XCTAssert(abs(bessel(1.0) - 0.765197686557966551) < 1e-16)
+            // This is an example where the required precision of `1e-16` does not translate to 16 correct digits, but only 13.
+            XCTAssert(abs(bessel(10.0) - -0.245935764451348337) < 1e-13)
         }
     }
 

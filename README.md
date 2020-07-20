@@ -3,7 +3,7 @@
 This package implements a power series expansion for real-analytic functions. It supports user-defined series, truncated either at a fixed index or when a convergence criterion is reached. Included are also some common functions' series representations.
 
 ## Example: Bessel function of the 1<sup>st</sup> kind
-This code snippet calculates the value J_0(2.0), where J is the Bessel function of the 1<sup>st</sup> kind.
+This code snippet calculates the value J_0(2.0), where J is the [Bessel function of the 1<sup>st</sup> kind](https://en.wikipedia.org/wiki/Bessel_function#Bessel_functions_of_the_first_kind:_Jα).
 
 ```swift
 import TaylorSeries
