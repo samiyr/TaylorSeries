@@ -36,6 +36,11 @@ final class TaylorSeriesTests: XCTestCase {
         XCTAssert(abs(mSinSeries.truncatedSeries(center: 0, to: 1e-12)(1.0) - -Darwin.sin(1.0)) < 1e-12)
         XCTAssert(abs(cosSeries.truncatedSeries(center: 0, up: 200)(2.0) - cosSeriesD.truncatedSeries(center: 0, up: 200)(2.0)) < 1e-12)
     }
+    func testDerivative2() {
+        let expSeries = TaylorSeries<Double>(summand: TaylorSeries.Common.exp)
+        let integrated = expSeries.derivative(10)
+        XCTAssert(abs(integrated.truncatedSeries(center: 0, to: 1e-12)(2.0) - Darwin.M_E * Darwin.M_E) < 1e-12)
+    }
     func testFactorialPerformance() {
         measure {
             for _ in 0...10000 {
