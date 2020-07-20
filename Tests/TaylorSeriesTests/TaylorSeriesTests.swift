@@ -4,6 +4,11 @@ import Darwin
 @testable import TaylorSeries
 
 final class TaylorSeriesTests: XCTestCase {
+    func testDivergent() {
+        let series = TaylorSeries<Double>(summand: TaylorSeries.Common.geometric)
+        let geometric = series.truncatedSeries(center: 0, to: 1e-3)
+        print(geometric(2.0))
+    }
     func testExp() {
         let series = TaylorSeries<Double>(summand: TaylorSeries.Common.exp)
         let exp = series.truncatedSeries(center: 0, up: 20)
@@ -18,12 +23,19 @@ final class TaylorSeriesTests: XCTestCase {
         measure {
             let series = TaylorSeries<Double>(summand: TaylorSeries.Common.besselJ(0))
             let bessel = series.truncatedSeries(center: 0, to: 1e-16)
-            XCTAssert(abs(bessel(1.0) - 0.765197686557966551) < 1e-16)
-            // This is an example where the required precision of `1e-16` does not translate to 16 correct digits, but only 13.
-            XCTAssert(abs(bessel(10.0) - -0.245935764451348337) < 1e-13)
+            XCTAssert(abs(pow(1.0, 0) * bessel(1.0) - 0.765197686557966551) < 1e-16)
+            // This is an example where the required precision of `1e-16` does not translate to 16 correct digits, but only 13. Unfortunately, this can't be improved by truncating the series manually, since we're fast approaching the limit of machine precision. This will be remedied once swift-numerics starts supporting higher-precision arithmetic.
+            XCTAssert(abs(pow(1.0, 0) * bessel(10.0) - -0.245935764451348337) < 1e-13)
         }
     }
 
+    func testDerivative() {
+        let cosSeries = TaylorSeries<Double>(summand: TaylorSeries.Common.cos)
+        let mSinSeries = cosSeries.derivative() // cos'(x) = -sin(x)
+        let cosSeriesD = cosSeries.derivative(4) // cos''''(x) = cos(x)
+        XCTAssert(abs(mSinSeries.truncatedSeries(center: 0, to: 1e-12)(1.0) - -Darwin.sin(1.0)) < 1e-12)
+        XCTAssert(abs(cosSeries.truncatedSeries(center: 0, up: 200)(2.0) - cosSeriesD.truncatedSeries(center: 0, up: 200)(2.0)) < 1e-12)
+    }
     func testFactorialPerformance() {
         measure {
             for _ in 0...10000 {
