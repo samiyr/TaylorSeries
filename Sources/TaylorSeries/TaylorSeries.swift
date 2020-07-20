@@ -2,7 +2,11 @@ import Foundation
 
 /// Represents a Taylor Series expansion for some real-analytic function.
 public struct TaylorSeries {
-    public typealias Summand = (Double, Int) -> (Double)
+    /// A closure implementing the terms to be summed.
+    /// `x` includes both the computation point and the center, meaning it's really `(x - x_0)`.
+    /// `n` is the summation index, starting at `start`.
+    /// See `Common` for examples on how it works.
+    public typealias Summand = (_ x: Double, _ n: Int) -> (Double)
     /// Terms to be summed. This must include everything in one package, including the (x - x_0)^n and n! parts. The reason for this is that it allows some sums (like sin and cos) to be defined more easily.
     public var summand: Summand
     /// Start index of the sum. Defaults to 0.
