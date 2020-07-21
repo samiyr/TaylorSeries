@@ -5,7 +5,7 @@ import Darwin
 
 final class TaylorSeriesTests: XCTestCase {
     func testDivergent() {
-        let series = TaylorSeries<Double>(summand: TaylorSeries.Common.geometric)
+        let series = TaylorSeries<Double>(summand: TaylorSeries.Common.Expansions.geometric)
         let geometric = series.truncatedSeries(precision: 1e-3)
         let value = geometric(2.0) // this is outside the radius of convergence (-1, 1).
         XCTAssert(value.info.contains(.divergenceSuspected))
@@ -30,18 +30,19 @@ final class TaylorSeriesTests: XCTestCase {
         XCTAssertFalse(value.info.contains(.divergenceSuspected))
     }
     func testExp() {
-        let series = TaylorSeries<Double>(summand: TaylorSeries.Common.exp)
+        let series = TaylorSeries<Double>(summand: TaylorSeries.Common.Expansions.exp)
         let exp = series.truncatedSeries(order: 20)
         XCTAssert(abs(exp(1.0).value - Darwin.M_E) < 1e-6)
     }
     func testSin() {
-        let series = TaylorSeries<Double>(summand: TaylorSeries.Common.sin)
-        let sin = series.truncatedSeries(precision: 1e-16)
+        let series = TaylorSeries<Double>(summand: TaylorSeries.Common.Expansions.sin)
+        let remainder = TaylorSeries<Double>.Common.Remainders.sin
+        let sin = series.truncatedSeries(digits: 16, remainder: remainder)
         XCTAssert(abs(sin(1.0).value - Darwin.sin(1.0)) < 1e-16)
     }
     func testBesselJ() {
         measure {
-            let series = TaylorSeries<Double>(summand: TaylorSeries.Common.besselJ(0))
+            let series = TaylorSeries<Double>(summand: TaylorSeries.Common.Expansions.besselJ(0))
             let bessel = series.truncatedSeries(precision: 1e-16)
             XCTAssert(abs(pow(1.0, 0) * bessel(1.0).value - 0.765197686557966551) < 1e-16)
             // This is an example where the required precision of `1e-16` does not translate to 16 correct digits, but only 13. Unfortunately, this can't be improved by truncating the series manually, since we're fast approaching the limit of machine precision. This will be remedied once swift-numerics starts supporting higher-precision arithmetic.
@@ -50,14 +51,14 @@ final class TaylorSeriesTests: XCTestCase {
     }
 
     func testDerivative() {
-        let cosSeries = TaylorSeries<Double>(summand: TaylorSeries.Common.cos)
+        let cosSeries = TaylorSeries<Double>(summand: TaylorSeries.Common.Expansions.cos)
         let mSinSeries = cosSeries.derivative() // cos'(x) = -sin(x)
         let cosSeriesD = cosSeries.derivative(4) // cos''''(x) = cos(x)
         XCTAssert(abs(mSinSeries.truncatedSeries(precision: 1e-12)(1.0).value - -Darwin.sin(1.0)) < 1e-12)
         XCTAssert(abs(cosSeries.truncatedSeries(order: 200)(2.0).value - cosSeriesD.truncatedSeries(order: 200)(2.0).value) < 1e-12)
     }
     func testDerivative2() {
-        let expSeries = TaylorSeries<Double>(summand: TaylorSeries.Common.exp)
+        let expSeries = TaylorSeries<Double>(summand: TaylorSeries.Common.Expansions.exp)
         let integrated = expSeries.derivative(10)
         XCTAssert(abs(integrated.truncatedSeries(precision: 1e-12)(2.0).value - Darwin.M_E * Darwin.M_E) < 1e-12)
     }

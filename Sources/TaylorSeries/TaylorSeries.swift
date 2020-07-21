@@ -13,14 +13,24 @@ public struct TaylorSeries<Number: Real> {
         
         /// Possible diagnostic/warning messages.
         public enum Info: Hashable {
-            /// The set `maxIterations` was reached. Includes the achieved precision before the computation was stopped.
-            case maxIterationsReached(reachedPrecision: Number)
+            /// The set `maxIterations` was reached. Includes the achieved precision before the computation was stopped, if available.
+            case maxIterationsReached(reachedPrecision: Number?)
             /// Divergent series detected.
             case divergenceSuspected
             /// One of the computation steps resulted in `NaN` (not a number). Returning the previous result.
             case nan
             /// One of the computation steps resulted in `inf` (infinity). Returning the previous result.
             case infinity
+        }
+    }
+    /// Represents the Taylor remainder term.
+    public struct RemainderEstimate {
+        /// A closure which gives a uniform bound `|f^(n + 1)(x)| <= M` on the interval `(center - x, center + x)`.
+        public let bound: (_ n: Int, _ x: Number, _ center: Number) -> (Number)
+        /// Calculates the actual remainder size estimate based on the given `bound`.
+        public func size(_ k: Int, _ x: Number, _ center: Number) -> Number {
+            let r = abs(x - center)
+            return bound(k + 1, x, center) * Number.pow(r, k + 1) / TaylorSeries.factorial(k + 1)
         }
     }
     /// A closure implementing the terms to be summed.
@@ -107,6 +117,51 @@ public struct TaylorSeries<Number: Real> {
         }
     }
     
+    /// Returns a truncated series, where the series is truncated at an appropariate point such that the result is guaranteed to have at least `digits` number of correct digits. This requires knowledge of the function, see the parameter `remainder`. However, the number of iterations is capped at `maxIterations` if it's set.
+    ///
+    /// - Parameter digits: The number of digits requested.
+    /// - Parameter remainder: A `RemainderEstimate` object, which encapsulates the required knowledge of the function's behaviour to apply Taylor's theorem and guarantee correctness.
+    /// - Parameter maxIterations: Sets a hard cap on the number of iterations, stopping even if the precision cannot be guaranteed. Defaults to `nil`, which means no limit.
+    /// - Returns: A callable closure which acts like a function. Calculates the approximate value of a function at the given input point.
+    public func truncatedSeries(digits: Int, remainder: RemainderEstimate, maxIterations: Int? = nil) -> (Number) -> (ExpansionResult) {
+        let precision = 1 / Number.pow(10, digits + 1)
+        return { x in
+            // Rough search
+            var n = 1
+            repeat {
+                n *= 2
+            } while remainder.size(n, x, center) > precision
+            
+            // Binary search
+            var upper = n
+            var lower = n / 2
+            repeat {
+                let middle = (upper + lower + 1) / 2 // + 1 guarantees that the result is rounded up without having to convert to Number
+                if remainder.size(middle, x, center) > precision {
+                    lower = middle
+                } else {
+                    upper = middle
+                }
+            } while upper - lower > 1
+            
+            let order: Int
+            if let maxIter = maxIterations {
+                order = max(upper, maxIter)
+            } else {
+                order = upper
+            }
+            
+            var result = truncatedSeries(order: order)(x)
+            
+            if let maxIter = maxIterations, upper > maxIter {
+                var info = result.info
+                info.insert(.maxIterationsReached(reachedPrecision: nil))
+                result = ExpansionResult(value: result.value, info: info)
+            }
+            return result
+        }
+    }
+    
     /// Yields the first-order derivative of the series.
     /// - SeeAlso: derivative()
     public var derivative: TaylorSeries {
@@ -130,94 +185,110 @@ public struct TaylorSeries<Number: Real> {
     }
     /// Defines some common series terms for ease of use. All of these are Maclaurin series, i.e. `center = 0`.
     public struct Common {
-        /// `1 / (1 - x)`, converges on the interval `(-1, 1)`.
-        public static var geometric: Summand {
-            return { n in
-                return (1, n)
+        public struct Expansions {
+            /// `1 / (1 - x)`, converges on the interval `(-1, 1)`.
+            public static var geometric: Summand {
+                return { n in
+                    return (1, n)
+                }
+            }
+            /// `exp(x)`, converges on the entire real axis.
+            public static var exp: Summand {
+                return { n in
+                    return (1 / factorial(n), n)
+                }
+            }
+            /// `sin(x)`, converges on the entire real axis.
+            public static var sin: Summand {
+                return { n in
+                    return (paritySign(n) / factorial(2 * n + 1), 2 * n + 1)
+                }
+            }
+            /// `sinh(x)`, converges on the entire real axis.
+            public static var sinh: Summand {
+                return { n in
+                    return (1 / factorial(2 * n + 1), 2 * n + 1)
+                }
+            }
+            /// `arcsin(x)`, converges on the interval `(-1 , 1)`.
+            public static var arcsin: Summand {
+                return { n in
+                    let num = factorial(2 * n)
+                    let den = Number.pow(2, 2 * n) * Number.pow(factorial(n), 2) * Number(2 * n + 1)
+                    return (num / den, 2 * n + 1)
+                }
+            }
+            /// `arcsinh(x)`, converges on the interval `(-1, 1)`.
+            public static var arcsinh: Summand {
+                return { n in
+                    let num = paritySign(n) * factorial(2 * n)
+                    let den = Number.pow(2, 2 * n) * Number.pow(factorial(n), 2) * Number(2 * n + 1)
+                    return (num / den, 2 * n + 1)
+                }
+            }
+            /// `cos(x)`, converges on the entire real axis.
+            public static var cos: Summand {
+                return { n in
+                    return (paritySign(n) / factorial(2 * n), 2 * n)
+                }
+            }
+            /// `cosh(x)`, converges on the entire real axis.
+            public static var cosh: Summand {
+                return { n in
+                    return (1 / factorial(2 * n), 2 * n)
+                }
+            }
+            /// `arctan(x)`, converges on the interval `[-1, 1]`.
+            public static var arctan: Summand {
+                return { n in
+                    // Workaround to 'compiler is unable to type-check the expression in reasonable time'
+                    let num = paritySign(n)
+                    let den = Number(2 * n + 1)
+                    return (num / den, 2 * n + 1)
+                }
+            }
+            /// `arctanh(x)`, converges on the interval `(-1, 1)`.
+            public static var arctanh: Summand {
+                return { n in
+                    return (1 / Number(2 * n + 1), 2 * n + 1)
+                }
+            }
+            /// `log(1 + x)`, converges on the interval `(-1, 1]`.
+            public static var logPlusOne: Summand {
+                return { n in
+                    if n == 0 { return (0, 0) }
+                    return (paritySign(n + 1) / Number(n), n)
+                }
+            }
+            /// `J_nu(x) / x^nu`(where `J_nu` is the Bessel function of the 1st kind)
+            public static func besselJ(_ nu: Number) -> Summand {
+                return { n in
+                    let num = paritySign(n)
+                    let den = factorial(n) * Number.gamma(nu + Number(n) + 1) * Number.pow(2, Number(2 * n) + nu)
+                    return (num / den, 2 * n)
+                }
+            }
+            /// `erf(x) * sqrt(pi) / 2`(where `erf(x)` is the error function)
+            public static var erf: Summand {
+                return { n in
+                    let num = paritySign(n)
+                    let den = factorial(n) * Number(2 * n + 1)
+                    return (num / den, 2 * n + 1)
+                }
             }
         }
-        /// `exp(x)`, converges on the entire real axis.
-        public static var exp: Summand {
-            return { n in
-                return (1 / factorial(n), n)
+        public struct Remainders {
+            /// `sin(x)`, converges on the entire real axis.
+            public static var sin: RemainderEstimate {
+                return RemainderEstimate { (n, x, c) -> (Number) in
+                    return 1
+                }
             }
-        }
-        /// `sin(x)`, converges on the entire real axis.
-        public static var sin: Summand {
-            return { n in
-                return (paritySign(n) / factorial(2 * n + 1), 2 * n + 1)
-            }
-        }
-        /// `sinh(x)`, converges on the entire real axis.
-        public static var sinh: Summand {
-            return { n in
-                return (1 / factorial(2 * n + 1), 2 * n + 1)
-            }
-        }
-        /// `arcsin(x)`, converges on the interval `(-1 , 1)`.
-        public static var arcsin: Summand {
-            return { n in
-                let num = factorial(2 * n)
-                let den = Number.pow(2, 2 * n) * Number.pow(factorial(n), 2) * Number(2 * n + 1)
-                return (num / den, 2 * n + 1)
-            }
-        }
-        /// `arcsinh(x)`, converges on the interval `(-1, 1)`.
-        public static var arcsinh: Summand {
-            return { n in
-                let num = paritySign(n) * factorial(2 * n)
-                let den = Number.pow(2, 2 * n) * Number.pow(factorial(n), 2) * Number(2 * n + 1)
-                return (num / den, 2 * n + 1)
-            }
-        }
-        /// `cos(x)`, converges on the entire real axis.
-        public static var cos: Summand {
-            return { n in
-                return (paritySign(n) / factorial(2 * n), 2 * n)
-            }
-        }
-        /// `cosh(x)`, converges on the entire real axis.
-        public static var cosh: Summand {
-            return { n in
-                return (1 / factorial(2 * n), 2 * n)
-            }
-        }
-        /// `arctan(x)`, converges on the interval `[-1, 1]`.
-        public static var arctan: Summand {
-            return { n in
-                // Workaround to 'compiler is unable to type-check the expression in reasonable time'
-                let num = paritySign(n)
-                let den = Number(2 * n + 1)
-                return (num / den, 2 * n + 1)
-            }
-        }
-        /// `arctanh(x)`, converges on the interval `(-1, 1)`.
-        public static var arctanh: Summand {
-            return { n in
-                return (1 / Number(2 * n + 1), 2 * n + 1)
-            }
-        }
-        /// `log(1 + x)`, converges on the interval `(-1, 1]`.
-        public static var logPlusOne: Summand {
-            return { n in
-                if n == 0 { return (0, 0) }
-                return (paritySign(n + 1) / Number(n), n)
-            }
-        }
-        /// `J_nu(x) / x^nu`(where `J_nu` is the Bessel function of the 1st kind)
-        public static func besselJ(_ nu: Number) -> Summand {
-            return { n in
-                let num = paritySign(n)
-                let den = factorial(n) * Number.gamma(nu + Number(n) + 1) * Number.pow(2, Number(2 * n) + nu)
-                return (num / den, 2 * n)
-            }
-        }
-        /// `erf(x) * sqrt(pi) / 2`(where `erf(x)` is the error function)
-        public static var erf: Summand {
-            return { n in
-                let num = paritySign(n)
-                let den = factorial(n) * Number(2 * n + 1)
-                return (num / den, 2 * n + 1)
+            /// `cos(x)`, converges on the entire real axis.
+            public static var cos: RemainderEstimate {
+                return RemainderEstimate { (n, x, c) -> (Number) in
+                    return 1
+                }
             }
         }
     }

@@ -8,7 +8,7 @@ Calculate erf(1), where erf is the [error function](https://en.wikipedia.org/wik
 ```swift
 import TaylorSeries
 
-let errorFunctionSeries = TaylorSeries<Double>(summand: TaylorSeries.Common.erf)
+let errorFunctionSeries = TaylorSeries<Double>(summand: TaylorSeries.Common.Expansions.erf)
 let erf = errorFunctionSeries.truncatedSeries(precision: 1e-6)
 print(String(format: "%.6f", 2 / sqrt(Double.pi) * erf(1.0).value)) // 0.842701
 ```
@@ -21,7 +21,7 @@ This code snippet calculates the value J_0'(2.0), where J is the [Bessel functio
 ```swift
 import TaylorSeries
 
-let besselSeries = TaylorSeries<Double>(summand: TaylorSeries.Common.besselJ(0))
+let besselSeries = TaylorSeries<Double>(summand: TaylorSeries.Common.Expansions.besselJ(0))
 let bessel = besselSeries.derivative.truncatedSeries(precision: 1e-16)
 print(bessel(2.0).value) // -0.5767248077568736, correct up to the penultimate digit
 ```
