@@ -1,8 +1,28 @@
 import Foundation
 import RealModule
 
-/// Represents a Taylor Series expansion for some real-analytic function.
+/// Represents a Taylor Series expansion for a real-analytic function
+/// around some expansion point.
 public struct TaylorSeries<Number: Real> {
+    /// A wrapper which includes the actual result of the computation as well as diagnostic information.
+    public struct ExpansionResult {
+        /// The actual computation result.
+        public let value: Number
+        /// Diagnostic information regarding the computation.
+        public let info: Set<Info>
+        
+        /// Possible diagnostic/warning messages.
+        public enum Info: Hashable {
+            /// The set `maxIterations` was reached. Includes the achieved precision before the computation was stopped.
+            case maxIterationsReached(reachedPrecision: Number)
+            /// Divergent series detected.
+            case divergenceSuspected
+            /// One of the computation steps resulted in `NaN` (not a number). Returning the previous result.
+            case nan
+            /// One of the computation steps resulted in `inf` (infinity). Returning the previous result.
+            case infinity
+        }
+    }
     /// A closure implementing the terms to be summed.
     /// `n` is the summation index, starting at `start`.
     /// The closure return must be of type `(coefficient, power)`,
@@ -14,42 +34,89 @@ public struct TaylorSeries<Number: Real> {
     public var summand: Summand
     /// Start index of the sum. Defaults to 0.
     public var start: Int = 0
+    /// The expansion point. Defaults to 0 (in which case the series are known as Maclaurin series).
+    public var center: Number = 0
     
-    /// Returns a callable closure with the series centered at `center` and truncated at `up`.
-    public func truncatedSeries(center: Number, up to: Int) -> (Number) -> (Number) {
+    /// Returns a truncated series with terms from `start` up to `order`.
+    /// - Parameter order: The order of the expansion, higher orders yield more accurate results at the cost of increased resource usage.
+    /// - Returns: A callable closure which acts like a function. Calculates the approximate value of a function at the given input point.
+    /// - Note: This function provides "direct access" and doesn't perform any checks that `truncatedSeries(precision: maxIterations:)` does.
+    public func truncatedSeries(order: Int) -> (Number) -> (ExpansionResult) {
         return { x in
-            return (start...to).map {
+            return ExpansionResult(value: (start...order).map {
                 let term = summand($0)
                 return term.0  * Number.pow(x - center, term.1)
-            }.reduce(0, +)
+            }.reduce(0, +), info: [])
         }
     }
-    /// Returns a callable closure where the series is truncated at an appropariate point such that the difference between the last two terms is less than `epsilon`. However, the summing is capped by `max`, which defaults to 1000.
+    
+    /// Returns a truncated series, where the series is truncated at an appropariate point such that the difference between the last two terms is less than `precision`. However, the number of iterations is capped at `maxIterations`, which defaults to 1000.
     ///
-    /// Note that `epsilon` does not guarantee correct digits, see `testBesselJ()` in `TaylorSeriesTests.swift`.
-    /// To guarantee correct digits, use Taylor's theorem to obtain an appropriate truncating index and use `truncatedSeries(center:, up:)` directly.
-    public func truncatedSeries(center: Number, to epsilon: Number, max iterations: Int = 1000) -> (Number) -> (Number) {
+    /// - Warning: Note that `precision` does not guarantee correct digits, see `testBesselJ()` in `TaylorSeriesTests.swift`. To guarantee correct digits, use Taylor's theorem to obtain an appropriate truncating index and use `truncatedSeries(order:)` directly.
+    /// - Parameter precision: The convergence criterion. The series is truncated once the last two terms are at most `precision` apart from each other (unless `maxIterations` is reached).
+    /// - Parameter maxIterations: Sets a hard cap on the number of iterations, stopping even if the convergence criterion hasn't been reached.
+    /// - Returns: A callable closure which acts like a function. Calculates the approximate value of a function at the given input point.
+    public func truncatedSeries(precision: Number, maxIterations: Int = 1000) -> (Number) -> (ExpansionResult) {
+        func divergenceCheck(_ deltas: [Number]) -> Bool {
+            if let first = deltas.first, let last = deltas.last, first < last {
+                return true
+            }
+            return false
+        }
         return { x in
             var value = Number(0)
             var prev = Number(0)
             var nonzeroFlag = false
             var i = start
+            var deltas = [Number]()
             repeat {
-                if i > iterations { break }
+                if i > maxIterations {
+                    let max = ExpansionResult.Info.maxIterationsReached(reachedPrecision: abs(value - prev))
+                    var info: Set<ExpansionResult.Info> = [max]
+                    if divergenceCheck(deltas) {
+                        info.insert(.divergenceSuspected)
+                    }
+                    return ExpansionResult(value: value, info: info)
+                }
                 prev = value
                 let term = summand(i)
                 let termValue = term.0 * Number.pow(x - center, term.1)
+                guard !termValue.isInfinite else {
+                    let inf = ExpansionResult.Info.infinity
+                    var info: Set<ExpansionResult.Info> = [inf]
+                    if divergenceCheck(deltas) {
+                        info.insert(.divergenceSuspected)
+                    }
+                    return ExpansionResult(value: prev, info: info)
+                }
+                guard !termValue.isNaN && !termValue.isSignalingNaN else {
+                    let nan = ExpansionResult.Info.nan
+                    var info: Set<ExpansionResult.Info> = [nan]
+                    if divergenceCheck(deltas) {
+                        info.insert(.divergenceSuspected)
+                    }
+                    return ExpansionResult(value: prev, info: info)
+                }
                 value += termValue
                 if !termValue.isZero { nonzeroFlag = true }
+                deltas.append(abs(value - prev))
                 i += 1
-            } while abs(value - prev) >= epsilon || !nonzeroFlag
-            return value
+            } while abs(value - prev) >= precision || !nonzeroFlag
+            let info: Set<ExpansionResult.Info> = divergenceCheck(deltas) ? [ExpansionResult.Info.divergenceSuspected] : []
+            return ExpansionResult(value: value, info: info)
         }
     }
     
-    /// Yields the derivative series of order `order` of the original series. The derivative is calculated by differentiating term-by-term, which in a power series amounts to multiplying the coefficient by some constant (determined by the `order`) and reducing the powers. `Order` defaults to 1, which is applying the derivative operator just once. `order` must be non-negative.
-    ///
-    /// **Warning**: the derivative series is not guaranteed to converge even if the original series did. It's up to you to check convergence.
+    /// Yields the first-order derivative of the series.
+    /// - SeeAlso: derivative()
+    public var derivative: TaylorSeries {
+        return derivative()
+    }
+    
+    /// Yields the derivative series of order `order` of the original series. The derivative is calculated by differentiating term-by-term, which in a power series amounts to multiplying the coefficient by some constant (determined by the `order`) and reducing the powers.
+    /// - Parameter order: The number of times the derivative operator is applied. Defaults to 1 and must be non-negative. If `order <= 0`, the original series is returned.
+    /// - Returns: A new series where the `summand` corresponds to the `order`:th derivative series.
+    /// - Warning: The derivative series is not guaranteed to converge even if the original series did. It's up to you to check convergence.
     public func derivative(_ order: Int = 1) -> TaylorSeries {
         if order <= 0 { return self }
         let newSummand: Summand = { n in
@@ -61,30 +128,33 @@ public struct TaylorSeries<Number: Real> {
         }
         return TaylorSeries(summand: newSummand, start: start)
     }
-    /// Defines some common series terms for ease of use.
+    /// Defines some common series terms for ease of use. All of these are Maclaurin series, i.e. `center = 0`.
     public struct Common {
-        /// 1 / (1 - x)
+        /// `1 / (1 - x)`, converges on the interval `(-1, 1)`.
         public static var geometric: Summand {
             return { n in
                 return (1, n)
             }
         }
-        
+        /// `exp(x)`, converges on the entire real axis.
         public static var exp: Summand {
             return { n in
                 return (1 / factorial(n), n)
             }
         }
+        /// `sin(x)`, converges on the entire real axis.
         public static var sin: Summand {
             return { n in
                 return (paritySign(n) / factorial(2 * n + 1), 2 * n + 1)
             }
         }
+        /// `sinh(x)`, converges on the entire real axis.
         public static var sinh: Summand {
             return { n in
                 return (1 / factorial(2 * n + 1), 2 * n + 1)
             }
         }
+        /// `arcsin(x)`, converges on the interval `(-1 , 1)`.
         public static var arcsin: Summand {
             return { n in
                 let num = factorial(2 * n)
@@ -92,6 +162,7 @@ public struct TaylorSeries<Number: Real> {
                 return (num / den, 2 * n + 1)
             }
         }
+        /// `arcsinh(x)`, converges on the interval `(-1, 1)`.
         public static var arcsinh: Summand {
             return { n in
                 let num = paritySign(n) * factorial(2 * n)
@@ -99,17 +170,19 @@ public struct TaylorSeries<Number: Real> {
                 return (num / den, 2 * n + 1)
             }
         }
-
+        /// `cos(x)`, converges on the entire real axis.
         public static var cos: Summand {
             return { n in
                 return (paritySign(n) / factorial(2 * n), 2 * n)
             }
         }
+        /// `cosh(x)`, converges on the entire real axis.
         public static var cosh: Summand {
             return { n in
                 return (1 / factorial(2 * n), 2 * n)
             }
         }
+        /// `arctan(x)`, converges on the interval `[-1, 1]`.
         public static var arctan: Summand {
             return { n in
                 // Workaround to 'compiler is unable to type-check the expression in reasonable time'
@@ -118,13 +191,20 @@ public struct TaylorSeries<Number: Real> {
                 return (num / den, 2 * n + 1)
             }
         }
+        /// `arctanh(x)`, converges on the interval `(-1, 1)`.
+        public static var arctanh: Summand {
+            return { n in
+                return (1 / Number(2 * n + 1), 2 * n + 1)
+            }
+        }
+        /// `log(1 + x)`, converges on the interval `(-1, 1]`.
         public static var logPlusOne: Summand {
             return { n in
                 if n == 0 { return (0, 0) }
                 return (paritySign(n + 1) / Number(n), n)
             }
         }
-        /// Gives J_nu(x) / x^nu
+        /// `J_nu(x) / x^nu`(where `J_nu` is the Bessel function of the 1st kind)
         public static func besselJ(_ nu: Number) -> Summand {
             return { n in
                 let num = paritySign(n)
@@ -132,7 +212,7 @@ public struct TaylorSeries<Number: Real> {
                 return (num / den, 2 * n)
             }
         }
-        /// Gives erf(x) * sqrt(pi) / 2
+        /// `erf(x) * sqrt(pi) / 2`(where `erf(x)` is the error function)
         public static var erf: Summand {
             return { n in
                 let num = paritySign(n)
@@ -150,7 +230,7 @@ public struct TaylorSeries<Number: Real> {
         return Number.gamma(Number(n + 1))
     }
 
-    /// Gives (-1)^n as a `Number`.
+    /// Gives `(-1)^n` as a `Number`.
     public static func paritySign(_ n: Int) -> Number {
         if n % 2 == 0 {
             return 1
