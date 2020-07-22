@@ -45,7 +45,7 @@ final class TaylorSeriesTests: XCTestCase {
             let series = TaylorSeries<Double>(summand: TaylorSeries.Common.Expansions.besselJ(0))
             let bessel = series.truncatedSeries(precision: 1e-16)
             XCTAssert(abs(pow(1.0, 0) * bessel(1.0).value - 0.765197686557966551) < 1e-16)
-            // This is an example where the required precision of `1e-16` does not translate to 16 correct digits, but only 13. Unfortunately, this can't be improved by truncating the series manually, since we're fast approaching the limit of machine precision. This will be remedied once swift-numerics starts supporting higher-precision arithmetic.
+            // This is an example where the required precision of `1e-16` does not translate to 16 correct digits, but only 13. This is partly due to the limitations of machine-precision arithmetic (floating-point errors). This will be remedied (to some degree) once swift-numerics starts supporting higher-precision arithmetic. You could even roll your own by conforming your custom number type to swift-numerics' Real protocol and use TaylorSeries with that type.
             XCTAssert(abs(pow(1.0, 0) * bessel(10.0).value - -0.245935764451348337) < 1e-13)
         }
     }
