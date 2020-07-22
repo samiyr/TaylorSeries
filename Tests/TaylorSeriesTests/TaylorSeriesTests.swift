@@ -37,7 +37,7 @@ final class TaylorSeriesTests: XCTestCase {
     func testSin() {
         let series = TaylorSeries<Double>(summand: TaylorSeries.Common.Expansions.sin)
         let remainder = TaylorSeries<Double>.Common.Remainders.sin
-        let sin = series.truncatedSeries(digits: 16, remainder: remainder)
+        let sin = series.truncatedSeries(precision: 1e-16, remainder: remainder)
         XCTAssert(abs(sin(1.0).value - Darwin.sin(1.0)) < 1e-16)
     }
     func testBesselJ() {

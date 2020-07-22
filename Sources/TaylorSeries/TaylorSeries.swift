@@ -117,14 +117,13 @@ public struct TaylorSeries<Number: Real> {
         }
     }
     
-    /// Returns a truncated series, where the series is truncated at an appropariate point such that the result is guaranteed to have at least `digits` number of correct digits. This requires knowledge of the function, see the parameter `remainder`. However, the number of iterations is capped at `maxIterations` if it's set.
+    /// Returns a truncated series, where the series is truncated at an appropariate point such that the result is guaranteed to have at least the requested precision. This requires knowledge of the function, see the parameter `remainder`. However, the number of iterations is capped at `maxIterations` if it's set.
     ///
-    /// - Parameter digits: The number of digits requested.
+    /// - Parameter precision: The precision requested. This means that the difference between the approximate value returned by this function and the true value of the function is at most `precision`, per Taylor's theorem.
     /// - Parameter remainder: A `RemainderEstimate` object, which encapsulates the required knowledge of the function's behaviour to apply Taylor's theorem and guarantee correctness.
     /// - Parameter maxIterations: Sets a hard cap on the number of iterations, stopping even if the precision cannot be guaranteed. Defaults to `nil`, which means no limit.
     /// - Returns: A callable closure which acts like a function. Calculates the approximate value of a function at the given input point.
-    public func truncatedSeries(digits: Int, remainder: RemainderEstimate, maxIterations: Int? = nil) -> (Number) -> (ExpansionResult) {
-        let precision = 1 / Number.pow(10, digits + 1)
+    public func truncatedSeries(precision: Number, remainder: RemainderEstimate, maxIterations: Int? = nil) -> (Number) -> (ExpansionResult) {
         return { x in
             // Rough search
             var n = 1
@@ -152,6 +151,13 @@ public struct TaylorSeries<Number: Real> {
             }
             
             var result = truncatedSeries(order: order)(x)
+            
+            guard !result.value.isNaN && !result.value.isSignalingNaN else {
+                return ExpansionResult(value: .nan, info: [.nan])
+            }
+            guard !result.value.isInfinite else {
+                return ExpansionResult(value: .infinity, info: [.infinity])
+            }
             
             if let maxIter = maxIterations, upper > maxIter {
                 var info = result.info
